@@ -1,0 +1,20 @@
+# === Step3 SFT 設定 ===
+model: "Qwen/Qwen3-0.6B"
+
+hf_dataset:
+  id: ""          # 空ならローカル data_step3 を使用（tinyで動作確認）
+  split: "train"
+  name: null
+
+training:
+  head_n: 512
+  epochs: 1
+  micro_batch_size: 8
+  lr: 1e-5
+
+wandb:
+  mode: "online"       # ★デフォルトは常に online
+  entity: "llm-compe-2025-kato"
+  project: "step3_sft"
+  run_name: "step3-qwen0.6b-h512-mbs8-e1"
+  group: ""

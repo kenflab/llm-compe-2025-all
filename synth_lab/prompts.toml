@@ -1,0 +1,77 @@
+[prompts]
+PROMPT_A = '''Clean up the OCR text below into Markdown + LaTeX.
+Goal: conservative restoration with minimal edits and high traceability.
+
+Requirements:
+- Fix obvious OCR errors: l/1, O/0, −/—, ×/x, ν/v, broken words/lines, misplaced spaces.
+- Keep original order; do not reorder paragraphs unless clearly swapped.
+- ALL math in LaTeX (inline $...$, display $$...$$). Use ASCII for Latin letters/digits/operators; Greek via macros (\alpha).
+- Use \frac, ^, _, \cdot; units via \mathrm{}; match parentheses and brackets.
+- Do NOT paraphrase or invent. If uncertain, write [UNCERTAIN: ...]; if missing, write [MISSING].
+- Output only one section: “Restored Document” in Markdown + LaTeX.
+
+OCR Text:
+<<<
+'''
+
+PROMPT_B = '''Reconstruct the document structure from the OCR text using Markdown + LaTeX.
+
+Steps:
+1) Detect and normalize headings (#, ##, ###), lists (numbered/bulleted), and code/math blocks.
+2) Convert tables to GitHub-Flavored Markdown tables (no HTML). Keep column alignment plausible.
+3) Math: ALL math in LaTeX (inline $...$, display $$...$$); use \frac, ^, _, \cdot, \mathrm{}; Greek via macros (\alpha).
+4) Academic blocks: mark Theorem/Lemma/Definition/Proof with bold labels (e.g., **Theorem.**).
+5) Fix OCR symbol confusions (l/1, O/0, −/—, ×/x, ν/v) and broken hyphenation.
+6) No invention; use [UNCERTAIN: ...] / [MISSING] when needed.
+
+Output sections:
+- Restored Structure (Markdown + LaTeX only)
+
+OCR Text:
+<<<
+'''
+
+PROMPT_C = '''Normalize math rigorously and then fix surrounding prose (Markdown + LaTeX).
+
+Math normalization rules:
+- Use ASCII for variables/operators; Greek via macros (\alpha, \beta, \gamma).
+- Replace typographic minus/en dash/em dash with proper minus; ensure consistent × vs x.
+- Fractions with \frac{...}{...}; exponents/subscripts with ^ and _; dot product \cdot.
+- Functions \sin, \cos, \log in roman; units with \mathrm{}; vectors/matrices formatted clearly (pmatrix/bmatrix if apparent).
+- Balance delimiters (), [], {} and \left...\right... when appropriate.
+- Inequalities <, >, \le, \ge; approx with \approx (not ~=).
+- Number display equations if the source hints at referencing (e.g., (1), (2)); otherwise do not invent numbers.
+
+Prose cleanup:
+- Fix broken words/lines; preserve sentence order; no paraphrasing.
+- If content unclear or missing, annotate with [UNCERTAIN: ...] or [MISSING].
+
+Output:
+- Restored Document (Markdown + LaTeX)
+
+OCR Text:
+<<<
+'''
+
+PROMPT_D = '''Restore the text (Markdown + LaTeX) and produce a concise change log.
+
+Edit policy:
+- High-precision fixes only: symbol disambiguation (l/1, O/0, −/—, ×/x, ν/v), word joins, spacing, paragraph swaps if obviously wrong.
+- ALL math in LaTeX: inline $...$, display $$...$$; \frac, ^, _, \cdot; units via \mathrm{}; Greek via macros (\alpha).
+- No paraphrasing or invention. Mark uncertainties as [UNCERTAIN: ...], gaps as [MISSING].
+
+Output exactly two sections:
+
+## Restored Document
+<Markdown + LaTeX only>
+
+## Change Log
+- List bullet points of concrete fixes you made, e.g.:
+  - "Replaced O with 0 in ‘10^3’ in Eq. (2)."
+  - "Joined hyphenated break: ‘infor- mation’ → ‘information’."
+  - "Standardized minus sign in line 5."
+  - "Marked [UNCERTAIN: ...] for ambiguous symbol near ‘\alpha’."
+
+OCR Text:
+<<<
+'''

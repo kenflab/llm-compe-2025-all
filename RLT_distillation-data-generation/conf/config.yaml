@@ -1,0 +1,37 @@
+# 入力データセット（例:Bespoke-Stratos-17k）
+dataset: bespokelabs/Bespoke-Stratos-17k  # Hugging Face上のデータセット名
+split: train  # 使いたいスプリットを指定（train/test など）
+
+provider: vllm  # [vllm]
+base_url: http://localhost:8000/v1
+
+# 使用する学習済教師モデル（vLLM 互換のものを指定）
+model: Qwen/Qwen3-14B  # Step2でアップロードしたHugging Face上のモデル名
+
+# 推論制御
+max_completion_tokens: 38000
+reasoning: true  # 使うなら true
+num_workers: 10  # テスト時は少なめ、実運用では並列度を上げる（例: 2500 を要件に応じて）
+max_samples: 100  # 全件なら null か削除
+
+# 出力先
+output_dir: outputs
+
+# 出力データセット
+hf_hub_repo: "llm-compe-2025-kato/step3-input-bespoke-stratos-17k"   # 出力先とするHugging Face上の新規データセット名
+hf_hub_private: false        # true にするとプライベートリポジトリとして作成
+
+# inference temperature
+temperature: 0.0          # 固定したい値をここで指定
+
+# Huggingface Hub token
+hf_token: 自分のHugging Faceトークンをここに入力(例:hf_xxxxxxxxxxxx)
+
+# vLLM serve 用パラメータ
+vllm_serve:
+  model: Qwen/Qwen3-14B  # Step2でアップロードしたHugging Face上のモデル名
+  tensor_parallel_size: 2
+  reasoning_parser: qwen3
+  rope_scaling: '{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":32768}'
+  max_model_len: 131072
+  gpu_memory_utilization: 0.95

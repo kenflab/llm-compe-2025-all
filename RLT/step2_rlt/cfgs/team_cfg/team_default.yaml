@@ -1,0 +1,17 @@
+defaults:
+  - _self_
+
+# チームで頻繁に変更する上位オーバーライド設定
+
+# プロジェクト/グループ/ラン名
+# wandb_project: step2_rlt_jk
+wandb_run_name: exp001
+wandb_group_name: teacher_sft_${wandb_run_name}
+
+# 各パラメータについてオーバーライドする場合こちらに設定
+
+
+# 出力先ルート（基本変更なし）
+results_dir: /home/Competition2025/P07/shareP07/share_model/step1_sft
+exp_name: ${now:%Y.%m.%d}${now:%H%M%S}
+output_dir: ${results_dir}/${wandb_run_name}/${exp_name}

@@ -1,0 +1,38 @@
+# Input dataset from Hugging Face
+dataset: "llm-compe-2025-kato/step2-evaluated-dataset"  # Hugging Face dataset with system_prompt, question_text, answer_text, chain_of_thought
+split: train  # train/test/validation
+
+provider: vllm  # [vllm]
+base_url: http://localhost:8000/v1
+
+# Evaluation model (Qwen3-32B for rubric evaluation)
+model: Qwen/Qwen3-32B  # Model for rubric evaluation
+
+# Inference control
+max_completion_tokens: 2000  # Reduced for evaluation responses
+num_workers: 10  # Parallel workers
+max_samples: null  # null for all samples, or specify number
+temperature: 0.0  # Keep deterministic for evaluation
+
+# Output settings
+output_dir: outputs
+hf_hub_repo: "llm-compe-2025-kato/step2-evaluated-dataset"  # Output Hugging Face dataset
+hf_hub_private: false
+
+# Huggingface Hub token
+hf_token: your_hf_token_here
+
+# vLLM serve parameters for Qwen3-32B
+vllm_serve:
+  model: Qwen/Qwen3-32B
+  tensor_parallel_size: 2
+  max_model_len: 8192
+  gpu_memory_utilization: 0.95
+
+# Rubric evaluation weights
+rubric_weights:
+  logical_coherence: 0.25
+  completeness: 0.20
+  clarity: 0.20
+  pedagogical_value: 0.20
+  efficiency: 0.15

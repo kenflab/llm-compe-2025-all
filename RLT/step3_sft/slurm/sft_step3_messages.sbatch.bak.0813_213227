@@ -1,0 +1,302 @@
+#!/bin/bash
+#SBATCH --partition=P07
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=64G
+#SBATCH --time=02:00:00
+#SBATCH --job-name=step3_msgs
+#SBATCH --output=step3_msgs_%j.log
+set -eE -o pipefail
+
+# --- 環境 ---
+module reset
+module load nccl/2.22.3
+module load hpcx/2.18.1-gcc-cuda12/hpcx-mt
+module load miniconda/24.7.1-py311
+source /home/appli/miniconda3/24.7.1-py311/etc/profile.d/conda.sh
+
+# CPU/コンパイル系抑止（ログインノード対策）
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export TORCH_COMPILE_DISABLE=1
+export NVTE_FUSED_ATTN=0
+export NCCL_IB_DISABLE=1
+
+share_path="/home/Competition2025/P07/shareP07/share_env"
+conda activate "$share_path/multi_sft_and_vllm" || { echo "[FATAL] conda activate failed"; exit 1; }
+## --- rendezvous env ---
+if [[ -z ${MASTER_ADDR:-} ]]; then MASTER_ADDR=$(hostname -I | awk '{print $1}'); fi
+export MASTER_ADDR
+export MASTER_PORT=${MASTER_PORT:-29501}
+if [[ -z ${GLOO_SOCKET_IFNAME:-} ]]; then GLOO_SOCKET_IFNAME=$(ip -o -4 addr show | awk '!/ lo /{print $2; exit}' ); fi
+export GLOO_SOCKET_IFNAME
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$GLOO_SOCKET_IFNAME}
+export NCCL_IB_DISABLE=1
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+ulimit -n 65536 || true
+echo "[RDZV] addr=$MASTER_ADDR port=$MASTER_PORT if=$GLOO_SOCKET_IFNAME"
+export MASTER_ADDR=127.0.0.1
+export MASTER_PORT=${MASTER_PORT:-29501}
+export GLOO_SOCKET_IFNAME=lo
+export NCCL_SOCKET_IFNAME=lo
+export NCCL_IB_DISABLE=1
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+
+cd "$HOME"
+
+# pyarrow / datasets 確認（計算ノードで実行）
+echo "PY=$(which python)"; python -V
+python - <<'PY'
+try:
+    import pyarrow as pa, pyarrow.parquet as pq
+    import datasets
+    print("pyarrow OK:", pa.__version__)
+    print("datasets OK:", datasets.__version__)
+except Exception as e:
+    print("[FATAL] pyarrow/datasets not available:", e)
+    raise SystemExit(3)
+PY
+
+export PYTHONPATH="$share_path/deps:$PYTHONPATH"
+
+# --- 認証 / W&B（必須: online） ---
+export HUGGINGFACE_HUB_TOKEN="${HUGGINGFACE_HUB_TOKEN:-${HF_TOKEN:-}}"
+unset WANDB_DISABLED
+export WANDB_MODE=online
+export WANDB_ENTITY="${WANDB_ENTITY:-llm-compe-2025-kato}"
+export WANDB_PROJECT="${WANDB_PROJECT:-step3_sft}"
+if [[ -z "${WANDB_API_KEY:-}" ]]; then
+  echo "[FATAL] WANDB_API_KEY 未設定。学習ログは必ず W&B(online) に記録します。"
+  exit 12
+fi
+
+# --- 可変パラメータ（step3 から渡る） ---
+MODEL="${MODEL:-Qwen/Qwen3-8B}"
+MBS="${MBS:-4}"
+EPOCHS="${EPOCHS:-1}"
+HEAD_N="${HEAD_N:-512}"
+RESUME="${RESUME:-disable}"
+DATA_WORKERS="${DATA_WORKERS:-2}"
+HF_DATASET_ID="${HF_DATASET_ID:-}"
+
+# 既定LR（必要なら export LR=... で上書き）
+LR="${LR:-1e-5}"
+
+# --- データ準備（messages形式） ---
+SRC="$HOME/data/gsm8k"                # Step2のParquet（extra_info型）がある場合の既定場所
+DST="$HOME/data_step3/gsm8k"
+mkdir -p "$DST"
+
+DATA_SRC="local"
+if [[ -n "$HF_DATASET_ID" ]]; then
+  DATA_SRC="$HF_DATASET_ID"
+  echo "[info] HF dataset -> messages 変換: $HF_DATASET_ID → $DST"
+  python - <<PY
+import os, json
+from pathlib import Path
+import pyarrow as pa, pyarrow.parquet as pq
+from datasets import load_dataset
+
+hf_id = os.environ["HF_DATASET_ID"]
+dst = Path(os.environ["DST"]); dst.mkdir(parents=True, exist_ok=True)
+
+def to_messages(row):
+    # 既にmessagesがあればそのまま
+    if "messages" in row and isinstance(row["messages"], (list,tuple)):
+        return row["messages"]
+    # extra_info経由（question/answer 想定）
+    qi, ai = None, None
+    if isinstance(row.get("extra_info"), dict):
+        qi = row["extra_info"].get("question")
+        ai = row["extra_info"].get("answer")
+    # フラットカラム候補
+    for qk, ak in [("question","answer"), ("question_text","answer_text")]:
+        if qi is None and qk in row and ak in row:
+            qi, ai = row[qk], row[ak]
+    if qi is None or ai is None:
+        raise ValueError("Cannot find question/answer fields in row keys="+",".join(row.keys()))
+    # 最終解を \\boxed{} に
+    ans = str(ai)
+    final = ans.split("####")[-1].strip()
+    if not final.startswith("\\boxed"):
+        final = f"\\boxed{{{final}}}"
+    # CoT相当は reasoning_content に
+    return [
+        {"role":"user","content":str(qi),"reasoning_content":""},
+        {"role":"assistant","content":final,"reasoning_content":ans.replace("####","").strip()},
+    ]
+
+def write_split(ds, out_path):
+    out=[]
+    for r in ds:
+        out.append({"messages": to_messages(r)})
+    pq.write_table(pa.Table.from_pylist(out), out_path)
+
+d = load_dataset(hf_id)
+if "train" in d:
+    train = d["train"]
+    test = d["test"] if "test" in d else (d["validation"] if "validation" in d else None)
+    if test is None:
+        # train末尾から簡易にテスト100件確保（足りなければ半分）
+        n = len(train)
+        k = min(100, max(1, n//10))
+        test = train.select(range(n-k, n))
+        train = train.select(range(0, n-k))
+else:
+    # 単一スプリットの場合
+    split_name = list(d.keys())[0]
+    full = d[split_name]
+    n = len(full)
+    k = min(100, max(1, n//10))
+    train = full.select(range(0, n-k))
+    test  = full.select(range(n-k, n))
+
+write_split(train, Path(dst/"train.parquet"))
+write_split(test,  Path(dst/"test.parquet"))
+print("[info] HF→messages 変換完了:", dst)
+PY
+elif [[ ! -s "$DST/train.parquet" || ! -s "$DST/test.parquet" ]]; then
+  # 手元の Step2 Parquet（extra_info型）から messages に変換
+  if [[ ! -s "$SRC/train.parquet" || ! -s "$SRC/test.parquet" ]]; then
+    echo "[FATAL] ソースが無い: $SRC/{train,test}.parquet"
+    echo "→ Step2.5のParquetを $SRC に配置 or HF_DATASET_ID を指定。"
+    exit 2
+  fi
+  echo "[info] local extra_info → messages 変換: $SRC → $DST"
+  python - <<'PY'
+import os, pyarrow as pa, pyarrow.parquet as pq
+from pathlib import Path
+home=os.environ["HOME"]
+src=Path(home)/"data/gsm8k"
+dst=Path(home)/"data_step3/gsm8k"; dst.mkdir(parents=True, exist_ok=True)
+def convert(split):
+    t=pq.read_table(src/f"{split}.parquet")
+    out=[]
+    for row in t.to_pylist():
+        q = row["extra_info"]["question"]
+        a = row["extra_info"]["answer"]
+        final = str(a).split("####")[-1].strip()
+        if not final.startswith("\\boxed"):
+            final = f"\\boxed{{{final}}}"
+        out.append({"messages":[
+            {"role":"user","content":q,"reasoning_content":""},
+            {"role":"assistant","content":final,"reasoning_content":str(a).replace("####","").strip()},
+        ]})
+    pq.write_table(pa.Table.from_pylist(out), dst/f"{split}.parquet")
+convert("train"); convert("test")
+PY
+fi
+
+TRAIN="$DST/train.parquet"; VAL="$DST/test.parquet"
+
+# 先頭N件スライス（HEAD_N=0 は全件）
+if [[ "${HEAD_N:-0}" != "0" ]]; then
+  python - <<PY
+import pyarrow.parquet as pq, pathlib
+base=pathlib.Path("$DST"); n=int("$HEAD_N")
+for sp in ["train","test"]:
+    t=pq.read_table(base/f"{sp}.parquet").slice(0,n)
+    pq.write_table(t, base/f"{sp}.tiny.parquet")
+PY
+  TRAIN="$DST/train.tiny.parquet"; VAL="$DST/test.tiny.parquet"
+fi
+
+# データ件数（train）
+TRAIN_ROWS=$(python - <<PY
+import pyarrow.parquet as pq; print(pq.read_table("$TRAIN").num_rows)
+PY
+); export TRAIN_ROWS
+
+echo "TRAIN=$TRAIN"
+echo "VAL=$VAL"
+echo "MODEL=$MODEL  MBS=$MBS  EPOCHS=$EPOCHS  LR=$LR"
+echo "RESUME=$RESUME  DATA_SRC=${HF_DATASET_ID:-local}"
+
+# --- 学習（messages モード） ---
+PYTHONPATH="$share_path/deps" torchrun --nnodes=1 --nproc_per_node=1 --rdzv_backend=c10d --rdzv_endpoint="${MASTER_ADDR}:${MASTER_PORT}" --max_restarts=0 --nnodes=1 --nproc_per_node=1 --rdzv_backend=c10d --rdzv_endpoint="${MASTER_ADDR}:${MASTER_PORT}" --max_restarts=0 --nnodes=1 --nproc_per_node=1 \
+  -m verl.trainer.fsdp_sft_trainer \
+  data.train_files="$TRAIN" \
+  data.val_files="$VAL" \
+  data.multiturn.enable=true \
+  data.multiturn.messages_key=messages \
+  data.multiturn.tools_key=tools \
+  data.multiturn.enable_thinking_key=enable_thinking \
+  data.max_length=1024 \
+  data.truncation=error \
+  +data.num_workers="${DATA_WORKERS:-2}" \
+  data.micro_batch_size_per_gpu="$MBS" \
+  model.partial_pretrain="$MODEL" \
+  model.fsdp_config.model_dtype=bfloat16 \
+  optim.lr="$LR" \
+  trainer.n_gpus_per_node=1 \
+  trainer.total_epochs="$EPOCHS" \
+  trainer.default_local_dir="$HOME/training/sft/checkpoints" \
+  trainer.logger='[console,wandb]' \
+  trainer.project_name="${WANDB_PROJECT}" \
+  trainer.experiment_name="${WANDB_RUN_NAME}_${SLURM_JOB_ID:-manual}" \
+  trainer.resume_mode="$RESUME"
+
+# --- 後処理：W&Bリンク/TSV出力 ---
+CKPT_DIR=$(python - <<'PY'
+import os,glob
+root=os.path.expanduser(os.path.join(os.environ["HOME"],"training/sft/checkpoints"))
+c=[p for p in glob.glob(os.path.join(root,"global_step_*")) if os.path.isdir(p)]
+c.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+print(c[0] if c else "")
+PY
+)
+
+WANDB_URL_RUN="https://wandb.ai/${WANDB_ENTITY}/${WANDB_PROJECT}/runs/${WANDB_RUN_ID:-}"
+WANDB_URL_PROJECT="https://wandb.ai/${WANDB_ENTITY}/${WANDB_PROJECT}"
+[[ "$WANDB_URL_RUN" =~ runs//$ ]] && WANDB_URL="$WANDB_URL_PROJECT" || WANDB_URL="$WANDB_URL_RUN"
+
+TOTAL=$(( ${TRAIN_ROWS:-0} * ${EPOCHS:-1} ))
+RUN_DIR="$HOME/training/sft/checkpoints/run_${SLURM_JOB_ID}"
+mkdir -p "$RUN_DIR"
+
+# run_name	model	data	data件数	epochs	lr	xxx	wandb(学習)	学習後のモデルパス	学習後のモデルHF	総処理件数	終了タグ付与成功件数	終了タグ付与成功率	備考
+printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+  "${WANDB_RUN_NAME:-step3_${SLURM_JOB_ID}}" \
+  "$MODEL" \
+  "${HF_DATASET_ID:-local}" \
+  "${TRAIN_ROWS:-}" \
+  "${EPOCHS:-}" \
+  "${LR:-}" \
+  "" \
+  "$WANDB_URL" \
+  "${CKPT_DIR:-}" \
+  "" \
+  "${TOTAL:-}" \
+  "" \
+  "" \
+  "${WANDB_NOTES:-}" \
+  | tee "$RUN_DIR/sheet_row.tsv"
+
+echo "[info] Sheets貼付用: $RUN_DIR/sheet_row.tsv"
+
+# --- W&B Artifact: 実行パラメータを保全 ---
+python - <<'PY'
+import os, pathlib, wandb
+proj=os.environ.get("WANDB_PROJECT","step3_sft")
+ent =os.environ.get("WANDB_ENTITY","llm-compe-2025-kato")
+run_name=os.environ.get("WANDB_RUN_NAME","step3")
+run = wandb.init(project=proj, entity=ent, name=f"{run_name}-params", resume="allow")
+
+art = wandb.Artifact(f"params-{os.environ.get('SLURM_JOB_ID','manual')}", type="sft-config")
+params = os.environ.get("PARAMS_YAML","")
+if params and os.path.exists(params):
+    art.add_file(params, name="params.yaml")
+
+# 参考メタ：latest ckpt のパスを添付（存在すれば）
+ckptr = pathlib.Path(os.environ["HOME"])/"training/sft/checkpoints/latest_checkpointed_iteration.txt"
+meta={}
+if ckptr.exists():
+    step = ckptr.read_text().strip()
+    meta["latest_ckpt"] = (ckptr.parent / f"global_step_{step}").as_posix()
+art.metadata = meta
+
+run.log_artifact(art)
+run.finish()
+PY

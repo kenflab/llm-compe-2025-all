@@ -1,0 +1,49 @@
+defaults:
+  - base
+  - _self_
+
+data_log_name: bespoke_stratos_17k
+
+# 複数データセット対応に変更
+datasets:
+  - dataset_id_or_path: bespokelabs/Bespoke-Stratos-17k
+    num_samples: null
+  - dataset_id_or_path: llm-compe-2025-kato/DeepMath-103K-formatted-solution1-updated
+    num_samples: 5000
+
+# 記載例
+  # 全データセットを使用する場合
+  # - dataset_id_or_path: bespokelabs/Bespoke-Stratos-17k
+  #   num_samples: null
+  # 一部のデータセットを使用する場合
+  # - dataset_id_or_path: llm-compe-2025-kato/DeepMath-103K-formatted-solution1-updated
+  #   num_samples: 5000
+
+system_prompt_style: stratos
+mask_teacher_answer: true
+return_student_prompt_info: true
+add_text_completions: false
+
+completion_only_training: True
+keep_columns: ~
+add_dataset_indices: False
+
+custom_start_of_response: 
+  _target_: custom_data.teacher_data.get_teacher_data_mask_delimiter
+  system_prompt_style: ${system_prompt_style}
+  mask_teacher_answer: ${mask_teacher_answer}
+  datasets: ${datasets}
+
+make_dataset_fn:
+  _target_: custom_data.sft_data.load_formatted_sft_dataset
+  datasets: ${datasets}
+  process_line_fn:
+    _target_: custom_data.teacher_data.get_process_line_fn
+    datasets: ${datasets}
+    system_prompt_style: ${system_prompt_style}
+    return_student_prompt_info: ${return_student_prompt_info}
+    add_text_completions: ${add_text_completions}
+  completion_only_training: ${completion_only_training}
+  custom_start_of_response: ${custom_start_of_response}
+  keep_columns: ${keep_columns}
+  add_dataset_indices: ${add_dataset_indices}

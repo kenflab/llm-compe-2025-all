@@ -1,0 +1,34 @@
+defaults:
+  - _self_
+
+# チームで頻繁に変更する上位オーバーライド設定
+
+# プロジェクト/グループ/ラン名
+# wandb_project: step1_sft
+wandb_run_name: exp001
+wandb_group_name: teacher_sft_${wandb_run_name}
+
+# === 学習スケジュール ===
+num_train_epochs: 10
+
+# === バッチサイズ設定 ===
+train_batch_size: 16
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 24
+
+# === シーケンス長 ===
+max_seq_length: 16384
+
+# === オプティマイザー設定 ===
+learning_rate: 1.0e-05
+weight_decay: 1e-4 
+adam_beta1: 0.9
+adam_beta2: 0.95
+adam_epsilon: 1e-8 
+max_grad_norm: 1.0 
+
+
+# 出力先ルート（基本変更なし）
+results_dir: /home/Competition2025/P07/shareP07/share_model/step1_sft
+exp_name: ${now:%Y.%m.%d}${now:%H%M%S}
+output_dir: ${results_dir}/${wandb_run_name}/${exp_name}

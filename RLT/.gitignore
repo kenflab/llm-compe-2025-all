@@ -1,0 +1,81 @@
+# byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# c extensions
+*.so
+
+# distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# virtual environments
+env/
+venv/
+ENV*/
+.venv*/
+.env*/
+
+# testing artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+nosetests.xml
+*.cover
+*.py,cover
+htmlcov/
+.cache/
+
+# type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# linting / reports
+pylint-report.txt
+
+# profiling
+profiler/
+
+# Jupyter notebooks and checkpoints
+*.ipynb
+.ipynb_checkpoints/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# editor project files
+.idea/
+.vscode/
+
+# logs
+*.log
+*.out
+
+# wandb experiment tracking
+wandb/
+
+# experiment results
+results/
+
+.DS_Store

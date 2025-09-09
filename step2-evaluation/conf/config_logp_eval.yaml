@@ -1,0 +1,48 @@
+# Input dataset configuration
+dataset: "llm-compe-2025-kato/step3-input-bespoke-stratos-17k-test1"  # Hugging Face dataset name
+split: train  # Split to use (train/test etc.)
+
+provider: hf_direct  # Only hf_direct for LogP evaluation
+base_url: ""  # Not needed for hf_direct
+
+# Student model for LogP evaluation (HuggingFace direct)
+model: Qwen/Qwen3-32B  # Student model for evaluation
+
+# Inference control
+max_completion_tokens: 38000
+reasoning: true  # Keep true for reasoning evaluation
+num_workers: 10  # Parallel workers (not used in hf_direct)
+max_samples: null  # Process all samples if null
+
+# Output configuration
+output_dir: outputs
+
+# Output dataset to Hugging Face
+hf_hub_repo: "llm-compe-2025-kato/step2-evaluated-dataset"  # Output HF dataset name
+hf_hub_private: false  # Set true for private repository
+
+# LogP evaluation parameters (from RLT teacher_rewards.py)
+answer_log_prob_coeff: [1.0, 0.01]  # Coefficients for log prob reward
+normalize_log_prob_fn: "exp"  # Normalization function: exp, exp_norm, or none
+clip_log_prob: 100000  # Clip threshold for log probabilities
+reduction_log_prob_fn: ["mean", "min"]  # Reduction functions for log probs
+not_matched_penalty: -1.0  # Penalty when solution tags not found
+
+# Inference temperature
+temperature: 0.7  # Temperature for LogP calculation
+unbias_log_probabilities: true  # Unbias log probs by temperature
+
+# Huggingface Hub token
+hf_token: your_huggingface_token_here  # Your HF token (e.g., hf_xxxxxxxxxxxx)
+
+# HuggingFace Direct configuration
+hf_direct:
+  torch_dtype: "bfloat16"
+  device: "cuda"
+  max_memory_per_gpu: "40GB"
+  max_chunk_size: 2048
+  use_accelerate: false
+
+# Logging
+debug: true  # Enable debug logging
+log_level: INFO  # Logging level: DEBUG, INFO, WARNING, ERROR

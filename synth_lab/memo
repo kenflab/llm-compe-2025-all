@@ -1,0 +1,161 @@
+
+git clone https://github.com/TimDettmers/bitsandbytes.git
+cd bitsandbytes
+git checkout 0.45.5
+
+
+# === モジュール初期化とロード ===
+module purge
+
+# module load miniconda/24.7.1-py312
+module load cuda/12.4
+module load cudnn/9.6.0
+module load nccl/2.20.5
+
+
+export CUDA_HOME=/home/appli/cuda/12.4
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+conda activate /home/Competition2025/P07/shareP07/share_env_KN/DeepSeek_tf_pp
+
+export BITSANDBYTES_CUDA_HOME="$CUDA_HOME"
+export BITSANDBYTES_CUDA_VERSION=124
+
+cmake -DCOMPUTE_BACKEND=cuda -DCMAKE_CUDA_ARCHITECTURES="90" -DCMAKE_CUDA_COMPILER=$CUDA_HOME/bin/nvcc -S . -B build
+cmake --build build -j 16
+
+
+mkdir -p bitsandbytes
+cp build/libbitsandbytes_cuda126.so bitsandbytes/
+cp build/libbitsandbytes_cpu.so bitsandbytes/
+
+
+nohup stdbuf -oL python test_deepseek_viz.py 2>&1   | awk '{ cmd="date \"+%Y-%m-%d %H:%M\""; cmd | getline d; close(cmd); print d, $0; fflush(); }'   > run.log &
+
+torch==2.4.1
+triton==3.0.0
+transformers==4.46.3
+safetensors==0.4.5
+
+
+
+pip install \
+  torch==2.4.1 \
+  torchvision==0.19.1 \
+  triton==3.0.0 \
+  transformers==4.46.3 \
+  safetensors==0.4.5 \
+  
+  bitsandbytes==0.40.0 \
+  tokenizers==0.20.4 \
+  huggingface-hub==0.25.2
+
+pip install tokenizers==0.20.4
+
+
+
+
+
+
+
+conda create -n deepseek_v3 python=3.12 -y
+
+conda install pytorch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 pytorch-cuda=12.4 -c pytorch -c nvidia -y
+
+pip install -r requirements.txt
+
+pip install bitsandbytes==0.46.1
+pip install accelerate==0.26.0 
+pip install accelerate==0.29.3
+transformers version: 4.55.0
+export BNB_CUDA_VERSION=124
+
+pip uninstall -y bitsandbytes
+pip install --upgrade bitsandbytes==0.46.1
+
+
+export BNB_CUDA_VERSION=124
+
+
+nohup stdbuf -oL python inference_4bit.py 2>&1   | awk '{ cmd="date \"+%Y-%m-%d %H:%M\""; cmd | getline d; close(cmd); print d, $0; fflush(); }'   > run.log &
+watch -n 1 nvidia-smi
+
+srun --partition P07 --nodes=1 --nodelist osk-gpu69 --cpus-per-task=2 --mem=4G --gpus-per-node=0 --time=03:00:00 --pty bash -i
+du -sh */
+
+
+srun --partition P07 --nodes=1 --nodelist osk-gpu69 --cpus-per-task=64 --mem=128G --gpus-per-node=2 --time=03:00:00 --pty bash -i
+du -sh */
+
+srun --partition P07 --nodes=1 --nodelist osk-gpu69 --cpus-per-task=128 --mem=512G --gpus-per-node=8 --time=03:00:00 --pty bash -i
+du -sh */
+
+~/.conda/envs/ds_infer/bin/nvcc
+export CUDA_HOME=$(dirname $(dirname $(which nvcc)))
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+
+import bitsandbytes as bnb
+print("Loaded bitsandbytes version:", bnb.__version__)
+print("Functional module contents:", dir(bnb.functional))
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    ca-certificates-2025.8.3   |       hbd8a1cb_0         151 KB  conda-forge
+    certifi-2025.8.3           |     pyhd8ed1ab_0         155 KB  conda-forge
+    conda-24.11.3              |  py311h38be061_0         1.1 MB  conda-forge
+    deepspeed-0.17.4           |cpu_py311hc5f606e_0         3.6 MB  conda-forge
+    gmp-6.3.0                  |       hac33072_2         449 KB  conda-forge
+    hjson-py-3.1.0             |     pyhd8ed1ab_1          43 KB  conda-forge
+    libaio-0.3.113             |       h166bdaf_0          18 KB  conda-forge
+    libtorch-2.6.0             |cpu_mkl_h8231793_100        52.0 MB  conda-forge
+    msgpack-python-1.1.1       |  py311hd18a35c_0         101 KB  conda-forge
+    py-cpuinfo-9.0.0           |     pyhd8ed1ab_1          25 KB  conda-forge
+    pybind11-2.13.6            |     pyhc790b64_3         182 KB  conda-forge
+    pybind11-global-2.13.6     |     pyh217bc35_3         176 KB  conda-forge
+    pytorch-2.6.0              |cpu_mkl_py311_he7f4357_100        27.2 MB  conda-forge
+    ------------------------------------------------------------
+                                           Total:        85.2 MB
+
+The following NEW packages will be INSTALLED:
+
+  annotated-types    conda-forge/noarch::annotated-types-0.7.0-pyhd8ed1ab_1 
+  cpython            conda-forge/noarch::cpython-3.11.13-py311hd8ed1ab_0 
+  deepspeed          conda-forge/linux-64::deepspeed-0.17.4-cpu_py311hc5f606e_0 
+  einops             conda-forge/noarch::einops-0.8.1-pyhd8ed1ab_0 
+  filelock           conda-forge/noarch::filelock-3.18.0-pyhd8ed1ab_0 
+  fsspec             conda-forge/noarch::fsspec-2025.7.0-pyhd8ed1ab_0 
+  gmp                conda-forge/linux-64::gmp-6.3.0-hac33072_2 
+  gmpy2              conda-forge/linux-64::gmpy2-2.2.1-py311h0f6cedb_0 
+  hjson-py           conda-forge/noarch::hjson-py-3.1.0-pyhd8ed1ab_1 
+  libabseil          conda-forge/linux-64::libabseil-20240722.0-cxx17_hbbce691_4 
+  libaio             conda-forge/linux-64::libaio-0.3.113-h166bdaf_0 
+  libprotobuf        conda-forge/linux-64::libprotobuf-5.28.3-h6128344_1 
+  libtorch           conda-forge/linux-64::libtorch-2.6.0-cpu_mkl_h8231793_100 
+  libuv              conda-forge/linux-64::libuv-1.51.0-hb03c661_1 
+  mpc                conda-forge/linux-64::mpc-1.3.1-h24ddda3_1 
+  mpfr               conda-forge/linux-64::mpfr-4.2.1-h90cbb55_3 
+  mpmath             conda-forge/noarch::mpmath-1.3.0-pyhd8ed1ab_1 
+  msgpack-python     conda-forge/linux-64::msgpack-python-1.1.1-py311hd18a35c_0 
+  optree             conda-forge/linux-64::optree-0.17.0-py311hdf67eae_0 
+  py-cpuinfo         conda-forge/noarch::py-cpuinfo-9.0.0-pyhd8ed1ab_1 
+  pybind11           conda-forge/noarch::pybind11-2.13.6-pyhc790b64_3 
+  pybind11-global    conda-forge/noarch::pybind11-global-2.13.6-pyh217bc35_3 
+  pydantic           conda-forge/noarch::pydantic-2.11.7-pyh3cfb1c2_0 
+  pydantic-core      conda-forge/linux-64::pydantic-core-2.33.2-py311hdae7d1d_0 
+  pytorch            conda-forge/linux-64::pytorch-2.6.0-cpu_mkl_py311_he7f4357_100 
+  sleef              conda-forge/linux-64::sleef-3.8-h1b44611_0 
+  sympy              conda-forge/noarch::sympy-1.14.0-pyh2585a3b_105 
+  typing-inspection  conda-forge/noarch::typing-inspection-0.4.1-pyhd8ed1ab_0 
+
+The following packages will be UPDATED:
+
+  ca-certificates    conda-forge/linux-64::ca-certificates~ --> conda-forge/noarch::ca-certificates-2025.8.3-hbd8a1cb_0 
+  certifi                            2024.8.30-pyhd8ed1ab_0 --> 2025.8.3-pyhd8ed1ab_0 
+  conda                              24.7.1-py311h38be061_0 --> 24.11.3-py311h38be061_0 
+  openssl                                  3.3.2-hb9d3cd8_0 --> 3.5.1-h7b32b05_0 

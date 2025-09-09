@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -eE -o pipefail
+
+# 既定値
+PART=P07; NODE=""; GPUS=1; CPUS=8; MEM=64G; TIME=01:00:00
+MODEL="Qwen/Qwen3-8B"; HEAD_N=512; MBS=4; EPOCHS=1
+RESUME=disable; WANDB_MODE=offline  # online/offline/disabled
+
+# データ取り込みの既定
+HF_DSET=""; HF_REVISION=""
+TRAIN_SPLIT="train"; VAL_SPLIT="test"
+SRC_DIR="$HOME/data/gsm8k"          # Step2/2.5 のローカル出力
+DST_DIR="$HOME/data_step3/gsm8k"    # messages 形式の保存先
+APPEND=0
+
+usage(){ cat <<USAGE
+Usage: step3 [options]
+  -N, --node NODE
+  -p, --partition PART
+  -t, --time HH:MM:SS
+  -m, --mem SIZE
+  -g, --gpus N
+  -c, --cpus N
+      --model HFID|PATH
+      --head N
+      --full
+      --mbs N
+  -e, --epochs N
+      --resume MODE
+      --wandb MODE
+
+  # Data 取り込み（Step2.5→Step3）
+      --hf-dset REPO_ID
+      --hf-rev  REV
+      --train-split NAME
+      --val-split   NAME
+      --src DIR
+      --dst DIR
+      --append
+
+  -h, --help
+USAGE
+}
+
+# 引数
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -N|--node) NODE="$2"; shift 2;;
+    -p|--partition) PART="$2"; shift 2;;
+    -t|--time) TIME="$2"; shift 2;;
+    -m|--mem) MEM="$2"; shift 2;;
+    -g|--gpus) GPUS="$2"; shift 2;;
+    -c|--cpus) CPUS="$2"; shift 2;;
+    --model) MODEL="$2"; shift 2;;
+    --head) HEAD_N="$2"; shift 2;;
+    --full) HEAD_N=0; shift;;
+    --mbs) MBS="$2"; shift 2;;
+    -e|--epochs) EPOCHS="$2"; shift 2;;
+    --resume) RESUME="$2"; shift 2;;
+    --wandb) WANDB_MODE="$2"; shift 2;;
+    --hf-dset) HF_DSET="$2"; shift 2;;
+    --hf-rev)  HF_REVISION="$2"; shift 2;;
+    --train-split) TRAIN_SPLIT="$2"; shift 2;;
+    --val-split)   VAL_SPLIT="$2"; shift 2;;
+    --src) SRC_DIR="$2"; shift 2;;
+    --dst) DST_DIR="$2"; shift 2;;
+    --append) APPEND=1; shift;;
+    -h|--help) usage; exit 0;;
+    *) echo "Unknown arg: $1"; usage; exit 1;;
+  esac
+done
+
+mkdir -p "$HOME/slurm_jobs" "$HOME/hf_cache"
+
+SBARGS="-p $PART --gres=gpu:$GPUS --cpus-per-task=$CPUS --mem=$MEM --time=$TIME --chdir=$HOME -o $HOME/slurm_jobs/step3_msgs_%j.log"
+[[ -n "$NODE" ]] && SBARGS+=" -w $NODE"
+
+# sbatch に渡す環境変数
+export_vars="ALL,HEAD_N=$HEAD_N,MBS=$MBS,EPOCHS=$EPOCHS,MODEL=$MODEL,RESUME=$RESUME,WANDB_MODE=$WANDB_MODE,HF_HUB_ENABLE_HF_TRANSFER=0,HF_HOME=$HOME/hf_cache,TRANSFORMERS_CACHE=$HOME/hf_cache,HF_DSET=$HF_DSET,HF_REVISION=$HF_REVISION,TRAIN_SPLIT=$TRAIN_SPLIT,VAL_SPLIT=$VAL_SPLIT,SRC_DIR=$SRC_DIR,DST_DIR=$DST_DIR,APPEND=$APPEND"
+
+cmd="sbatch --parsable $SBARGS --export=$export_vars $HOME/slurm_jobs/sft_step3_messages.sbatch"
+echo "$cmd"
+jid=$(eval "$cmd")
+echo "JOBID=$jid"
+echo "LOG=$HOME/slurm_jobs/step3_msgs_${jid}.log"

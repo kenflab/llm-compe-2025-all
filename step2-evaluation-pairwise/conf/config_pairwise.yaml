@@ -1,0 +1,39 @@
+# Pairwise comparison configuration file
+# Dataset 1 (first model's results)
+dataset1: "llm-compe-2025-kato/model1-tag-validation-results"  # Replace with actual HF dataset name
+# Dataset 2 (second model's results) 
+dataset2: "llm-compe-2025-kato/model2-tag-validation-results"  # Replace with actual HF dataset name
+
+provider: vllm  # [vllm]
+base_url: http://localhost:8000/v1
+
+# Judge model for pairwise comparison
+model: Qwen/Qwen3-32B  # Judge model name
+
+# Inference control
+max_completion_tokens: 4000
+reasoning: true  # Set to true if using reasoning
+num_workers: 5  # Number of parallel workers for comparison
+max_samples: null  # null means process all valid samples
+
+# Output settings
+output_dir: outputs
+
+# Output dataset for pairwise comparison results
+hf_hub_repo: "llm-compe-2025-kato/pairwise-comparison-results"   # HF dataset name for comparison results
+hf_hub_private: false        # Set to true for private repository
+
+# Inference temperature
+temperature: 0.0          # Fixed temperature for consistent evaluation
+
+# Huggingface Hub token
+hf_token: your_hf_token_here  # Replace with your actual HF token (e.g., hf_xxxxxxxxxxxx)
+
+# vLLM serve parameters
+vllm_serve:
+  model: Qwen/Qwen3-14B  # Judge model name
+  tensor_parallel_size: 2
+  reasoning_parser: qwen3
+  rope_scaling: '{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":32768}'
+  max_model_len: 131072
+  gpu_memory_utilization: 0.95
